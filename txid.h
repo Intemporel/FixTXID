@@ -2,10 +2,10 @@
 #define TXID_H
 
 #include "fix.h"
-#include "error.h"
 #include "listfile.h"
 
 #include <QDir>
+#include <QFile>
 #include <QMimeData>
 #include <QFileInfo>
 #include <QMainWindow>
@@ -18,6 +18,19 @@
 QT_BEGIN_NAMESPACE
 namespace Ui { class TXID; }
 QT_END_NAMESPACE
+
+enum SendMessage {
+    MSG_LOG,
+    MSG_ERROR
+};
+
+enum keyMessage {
+    NONE,
+    PROGRESS,
+    DONE,
+    ERROR,
+    KEY_COUNT
+};
 
 class TXID : public QMainWindow
 {
@@ -40,15 +53,28 @@ private:
 
     int fixed = 0;
     int count = 0;
+    int error = 0;
+    int alreadyConverted = 0;
+    QString dir;
 
     void generateModelList(QString);
     bool listfileExist();
     void initializeTree();
+    void populateFileAlreadyConverted(QString modelName);
+
+    QString getError(qint8);
+    void sendMessage(SendMessage, keyMessage, QString);
+    QString getPrefix[KEY_COUNT] = {
+        "<b>",
+        "<b style=\"color:orange;\">Progress >> ",
+        "<b style=\"color:green;\">Done >> ",
+        "<b style=\"color:red;\">Error >> "
+    };
 
 private slots:
     // listfile.h
-    void loadListfile();
-    void generatedMap();
+    void listfileDownloaded();
+    void listfileMapped();
     // fix.h
     void updateCount();
     void updateError(QString, qint8);

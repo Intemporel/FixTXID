@@ -27,6 +27,7 @@ bool Fix::getInformation()
     if (MD20Size <= 264)
     {
         error_type = 1;
+        file.close();
         return false;
     }
 
@@ -56,6 +57,7 @@ bool Fix::getInformation()
             if ( skip_error > 10 )
             {
                 error_type = 2;
+                file.close();
                 return false;
             }
 

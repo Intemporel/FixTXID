@@ -1,4 +1,4 @@
-#include "txid.h"
+ #include "txid.h"
 #include "ui_txid.h"
 
 TXID::TXID(QWidget *parent)
@@ -11,36 +11,35 @@ TXID::TXID(QWidget *parent)
     setAcceptDrops(true);
     ui->fix->setEnabled(false);
 
-    connect(&listfile, SIGNAL(mapped()), this, SLOT(generatedMap()));
-    connect(&listfile, SIGNAL(downloaded()), this, SLOT(loadListfile()));
+    connect(&listfile, SIGNAL(mapped()), this, SLOT(listfileMapped()));
+    connect(&listfile, SIGNAL(downloaded()), this, SLOT(listfileDownloaded()));
 
     connect(&model, SIGNAL(updated()), this, SLOT(updateProgressBar()));
     connect(&model, SIGNAL(sendError(QString, qint8)), this, SLOT(updateError(QString, qint8)));
 
     if (listfileExist())
     {
-        ui->listfileProgress->setText("Progress: Mapping listfile.csv");
+        sendMessage(MSG_LOG, NONE, "<b>We found listfile in the directory's application</b>");
+        sendMessage(MSG_LOG, PROGRESS, "Mapping listfile");
         listfile.mapping();
     }
     else
     {
-        ui->listfileProgress->setText("Progress: Downloading listfile.csv ...");
+        sendMessage(MSG_LOG, NONE, "<b>We can't found listfile in the directory's application</b>");
+        sendMessage(MSG_LOG, PROGRESS, "Downloading listfile");
         listfile.initialize();
     }
 
-    connect(ui->selectDir, &QPushButton::clicked, [=]() {selectDirectory();});
-    connect(ui->removeSel, &QPushButton::clicked, [=]() {removeSelectedItem();});
-    connect(ui->fix, &QPushButton::clicked, [=]() {fixAllModel();});
-    connect(ui->treeModel, &QTreeWidget::itemSelectionChanged, [=]() {listModelUpdate();});
-    connect(ui->treeModel, &QTreeWidget::itemExpanded, [=]() {ui->treeModel->resizeColumnToContents(0);});
+    connect(ui->selectDir, &QPushButton::clicked,              [this]() { selectDirectory(); });
+    connect(ui->removeSel, &QPushButton::clicked,              [this]() { removeSelectedItem(); });
+    connect(ui->fix,       &QPushButton::clicked,              [this]() { fixAllModel(); });
+    connect(ui->treeModel, &QTreeWidget::itemSelectionChanged, [this]() { listModelUpdate(); });
+    connect(ui->treeModel, &QTreeWidget::itemExpanded,         [this]() { ui->treeModel->resizeColumnToContents(0); });
 
     initializeTree();
 }
 
-TXID::~TXID()
-{
-    delete ui;
-}
+TXID::~TXID() { delete ui; }
 
 void TXID::dragEnterEvent(QDragEnterEvent *e)
 {
@@ -60,6 +59,8 @@ void TXID::dropEvent(QDropEvent *e)
 
         if ( data.isDir() )
             generateModelList(data.absoluteFilePath());
+
+        dir = data.absoluteDir().absolutePath();
     }
 
     updateCount();
@@ -98,6 +99,8 @@ void TXID::generateModelList(QString path)
 {
     if (!(QFileInfo(path)).isDir())
         return;
+
+    sendMessage(MSG_LOG, NONE, "Dropped directory from : <b>" + path + "</b>");
 
     QDirIterator dit(path, QDir::NoDotAndDotDot | QDir::Dirs, QDirIterator::Subdirectories);
 
@@ -223,23 +226,45 @@ void TXID::initializeTree()
     ui->treeModel->setHeaderLabels(labels);
 }
 
+void TXID::populateFileAlreadyConverted(QString modelName)
+{
+    QFile f("AlreadyConverted.csv");
+    if (f.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append))
+    {
+        QTextStream in(&f);
+        in << modelName.remove(dir) << ",\n";
+        f.close();
+    }
+}
+
 void TXID::updateCount()
 {
     count = ui->listModel->count();
     ui->progress->setMaximum(count);
-    ui->fileFixed->setText(QString("%1/%2").arg(fixed).arg(count));
+    ui->fileFixed->setText(QString::number(fixed) + "/" + QString::number(count));
 }
 
 void TXID::updateError(QString model, qint8 errorType)
 {
-    errorList[model] = errorType;
-    ui->error->setText(QString("Error count : %1").arg(errorList.count()));
+    error++;
+    if (errorType == 1) //MD20Size <= 264
+    {
+        alreadyConverted++;
+
+        if (ui->alreadyConnected->isChecked())
+            populateFileAlreadyConverted(model);
+    }
+    else
+    {
+        sendMessage(MSG_ERROR, ERROR, model + " >> " + getError(errorType));
+    }
+    updateProgressBar();
 }
 
 void TXID::updateProgressBar()
 {
     fixed++;
-    ui->fileFixed->setText(QString("%1/%2").arg(fixed).arg(count));
+    ui->fileFixed->setText(QString::number(fixed) + "/" + QString::number(count));
     ui->progress->setValue(fixed);
 }
 
@@ -252,17 +277,16 @@ bool TXID::listfileExist()
     return false;
 }
 
-void TXID::loadListfile()
+void TXID::listfileDownloaded()
 {
-    ui->listfileProgress->setText("Done: listfile.csv generated");
-    ui->fix->setEnabled(true);
+    sendMessage(MSG_LOG, DONE, "listfile is downloaded");
+    sendMessage(MSG_LOG, PROGRESS, "Mapping listfile");
 }
 
-void TXID::generatedMap()
+void TXID::listfileMapped()
 {
-    ui->listfileProgress->setText("Done: listfile.csv generated");
+    sendMessage(MSG_LOG, DONE, "listfile is mapped");
     ui->fix->setEnabled(true);
-
     model.setDictionnary(listfile.getListfile());
 }
 
@@ -270,28 +294,30 @@ void TXID::fixAllModel()
 {
     errorList.clear();
     fixed = 0;
+    error = 0;
+    alreadyConverted = 0;
 
     for (int i = 0; i < ui->listModel->count(); ++i)
     {
         QListWidgetItem *item = ui->listModel->item(i);
-
         try
         {
             model.setModel(item->text());
             model.run();
-
-            ui->fileName->setText(item->text());
-        } catch (_exception e) {
-
+        } catch (const std::exception &e) {
+            sendMessage(MSG_ERROR, ERROR, e.what());
         }
     }
 
-    error err;
-    err.setArrayError(errorList);
-    err.generateErrorLog();
+    sendMessage(MSG_LOG, DONE, "All files fixed !");
 
-    fixed = 0; count = 0;
-    ui->fileName->setText("All files fixed !");
+    if (error > 0)
+        sendMessage(MSG_LOG, ERROR, QString("Found %1 errors.").arg(error));
+
+    if (alreadyConverted > 0)
+        sendMessage(MSG_LOG, NONE, QString("%1/%2 models still already converted").arg(alreadyConverted).arg(count));
+
+    fixed = 0; count = 0, error = 0, alreadyConverted = 0;
     ui->fileFixed->clear();
     removeSelectedItem();
 }
@@ -314,4 +340,38 @@ void TXID::listModelUpdate()
     }
 
     updateCount();
+}
+
+QString TXID::getError(qint8 value)
+{
+    switch (value) {
+    case 0:
+        return "File doesn't exist or not found.";
+        break;
+    case 1:
+        return "Model is already converted to 3.3.5 version.";
+        break;
+    case 2:
+        return "TXID chunk not found";
+        break;
+    default:
+        return "Error not found.";
+        break;
+    }
+
+    return "Error not found.";
+}
+
+void TXID::sendMessage(SendMessage t, keyMessage key, QString s)
+{
+    QString append = getPrefix[key] + s + "</b>";
+    switch (t) {
+    default:
+    case MSG_LOG:
+        ui->logBrowser->setHtml(ui->logBrowser->toHtml() + append);
+        break;
+    case MSG_ERROR:
+        ui->errorBrowser->setHtml(ui->errorBrowser->toHtml() + append);
+        break;
+    }
 }
