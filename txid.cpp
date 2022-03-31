@@ -30,13 +30,14 @@ TXID::TXID(QWidget *parent)
         listfile.initialize();
     }
 
-    connect(ui->selectDir, &QPushButton::clicked,              [this]() { selectDirectory(); });
-    connect(ui->removeSel, &QPushButton::clicked,              [this]() { removeSelectedItem(); });
-    connect(ui->fix,       &QPushButton::clicked,              [this]() { fixAllModel(); });
-    connect(ui->treeModel, &QTreeWidget::itemSelectionChanged, [this]() { listModelUpdate(); });
-    connect(ui->treeModel, &QTreeWidget::itemExpanded,         [this]() { ui->treeModel->resizeColumnToContents(0); });
+    connect(ui->selectDir,  &QPushButton::clicked,              [this]() { selectDirectory(); });
+    connect(ui->removeSel,  &QPushButton::clicked,              [this]() { ui->listModel->clear(); });
 
-    initializeTree();
+    connect(ui->fix,        &QPushButton::clicked,              [this]() { fixAllModel(); });
+    connect(ui->fix_shadow, &QPushButton::clicked,              [this]() { fixAllModelShadow(); });
+
+    connect(ui->treeView, &QTreeView::clicked, [this]() { updateList(); });
+    connect(ui->treeView, &QTreeView::expanded, [this]() { ui->treeView->resizeColumnToContents(0); });
 }
 
 TXID::~TXID() { delete ui; }
@@ -77,153 +78,30 @@ void TXID::selectDirectory()
         generateModelList(dir);
 }
 
-void TXID::removeSelectedItem(bool onlyListModel)
-{
-    ui->listModel->clear();
-
-    if ( onlyListModel )
-        return;
-
-    for (QTreeWidgetItem* item : ui->treeModel->selectedItems())
-    {
-        QTreeWidgetItem* parent = item->parent();
-
-        if (parent)
-            parent->removeChild(item);
-
-        delete item;
-    }
-}
-
 void TXID::generateModelList(QString path)
 {
     if (!(QFileInfo(path)).isDir())
         return;
 
+    file_model = new QFileSystemModel(this);
+    file_model->setRootPath(path + "/");
+    file_model->setNameFilterDisables(false);
+
+    QStringList filters;
+    filters << "*.m2";
+    filters << "*.mdx";
+
+    file_model->setNameFilters(filters);
+
+    ui->treeView->setModel(file_model);
+    ui->treeView->setRootIndex(file_model->index(path + "/"));
+    ui->treeView->resizeColumnToContents(0);
+
+    for (int i = 1; i < file_model->columnCount(); ++i)
+        ui->treeView->hideColumn(i);
+
     sendMessage(MSG_LOG, NONE, "Dropped directory from : <b>" + path + "</b>");
-
-    QDirIterator dit(path, QDir::NoDotAndDotDot | QDir::Dirs, QDirIterator::Subdirectories);
-
-    // Initialize folder
-    QRegularExpression pattern("^(.*)/");
-    QRegularExpressionMatch match = pattern.match(path);
-    QString start = path.mid(match.capturedEnd(), path.length() - match.capturedEnd());
-    QRegularExpression reg("^(.*)" + start + "/");
-    qint8 length = start.size() + 1;
-
-    QTreeWidgetItem *root = new QTreeWidgetItem(ui->treeModel);
-    root->setText(0, start);
-    root->setText(1, path);
-    ui->treeModel->addTopLevelItem(root);
-
-    while (dit.hasNext())
-    {
-        QString saved = dit.next();
-        QRegularExpressionMatch temp = reg.match(saved);
-        QString current = saved.mid(temp.capturedEnd() - length, path.length() - temp.capturedEnd() - length);
-        bool isChild = false;
-
-        QTreeWidgetItem *item = new QTreeWidgetItem();
-        QString text0 = current.mid(length, current.length() - length);
-        item->setText(0, text0);
-        item->setText(1, saved);
-
-        for (int i = 0; i < ui->treeModel->topLevelItemCount(); ++i)
-        {
-            QTreeWidgetItem *twi = ui->treeModel->topLevelItem(i);
-            if ( current.contains(twi->text(0)) )
-            {
-                qint8 tempLen;
-                for (int a = 0; a < twi->childCount(); ++a)
-                {
-                    QTreeWidgetItem *itemA = twi->child(a);
-                    if ( current.contains(itemA->text(0) + R"(/)") )
-                    {
-                        tempLen = itemA->text(0).length() + 1;
-                        text0 = text0.mid(tempLen, text0.length() - tempLen);
-                        item->setText(0, text0);
-
-                        for (int b = 0; b < itemA->childCount(); b++)
-                        {
-                            QTreeWidgetItem *itemB = itemA->child(b);
-                            if ( current.contains(itemB->text(0) + R"(/)") )
-                            {
-                                tempLen = itemB->text(0).length() + 1;
-                                text0 = text0.mid(tempLen, text0.length() - tempLen);
-                                item->setText(0, text0);
-
-                                for (int c = 0; c < itemB->childCount(); ++c)
-                                {
-                                    QTreeWidgetItem *itemC = itemB->child(c);
-                                    if ( current.contains(itemC->text(0) + R"(/)") )
-                                    {
-                                        tempLen = itemC->text(0).length() + 1;
-                                        text0 = text0.mid(tempLen, text0.length() - tempLen);
-                                        item->setText(0, text0);
-
-                                        for (int d = 0; d < itemC->childCount(); ++d)
-                                        {
-                                            QTreeWidgetItem* itemD = itemC->child(d);
-                                            if ( current.contains(itemD->text(0) + R"(/)") )
-                                            {
-                                                tempLen = itemD->text(0).length() + 1;
-                                                text0 = text0.mid(tempLen, text0.length() - tempLen);
-                                                item->setText(0, text0);
-
-                                                itemD->addChild(item);
-                                                isChild = true;
-                                                break;
-                                            }
-                                        }
-
-                                        if ( isChild )
-                                            break;
-
-                                        itemC->addChild(item);
-                                        isChild = true;
-                                        break;
-                                    }
-                                }
-
-                                if ( isChild )
-                                    break;
-
-                                itemB->addChild(item);
-                                isChild = true;
-                                break;
-                            }
-                        }
-
-                        if ( isChild )
-                            break;
-
-                        itemA->addChild(item);
-                        isChild = true;
-                        break;
-                    }
-                }
-
-
-                if ( !isChild )
-                {
-                    twi->addChild(item);
-                    break;
-                }
-            }
-        }
-    }
-
-    ui->treeModel->resizeColumnToContents(0);
     updateCount();
-}
-
-void TXID::initializeTree()
-{
-    ui->treeModel->setColumnCount(2);
-
-    QStringList labels;
-    labels << "Directory" << "Path";
-    ui->treeModel->setHeaderLabels(labels);
 }
 
 void TXID::populateFileAlreadyConverted(QString modelName)
@@ -319,26 +197,73 @@ void TXID::fixAllModel()
 
     fixed = 0; count = 0, error = 0, alreadyConverted = 0;
     ui->fileFixed->clear();
-    removeSelectedItem();
+    ui->listModel->clear();
 }
 
-void TXID::listModelUpdate()
+void TXID::fixAllModelShadow()
 {
-    removeSelectedItem(true);
+    errorList.clear();
+    fixed = 0;
+    error = 0;
+    alreadyConverted = 0;
 
-    for (QTreeWidgetItem *item : ui->treeModel->selectedItems())
+    for (int i = 0; i < ui->listModel->count(); ++i)
     {
-        QString path = item->text(1);
-        QDirIterator it(path, QStringList() << "*.m2", QDir::Files, QDirIterator::Subdirectories);
-
-        while (it.hasNext())
+        QListWidgetItem *item = ui->listModel->item(i);
+        try
         {
-            QString file = it.next();
-            if(ui->listModel->findItems(file, Qt::MatchExactly).isEmpty())
-                ui->listModel->addItem(file);
+            model.setModel(item->text());
+            model.getInformation(true);
+            model.updateBoneLookupTable();
+        }
+        catch (const std::exception &e)
+        {
+            sendMessage(MSG_ERROR, ERROR, e.what());
         }
     }
 
+    sendMessage(MSG_LOG, DONE, "All Shadow fixed !");
+
+    if (error > 0)
+        sendMessage(MSG_LOG, ERROR, QString("Found %1 errors.").arg(error));
+
+    if (alreadyConverted > 0)
+        sendMessage(MSG_LOG, NONE, QString("%1/%2 models still already converted").arg(alreadyConverted).arg(count));
+
+    fixed = 0; count = 0, error = 0, alreadyConverted = 0;
+    ui->fileFixed->clear();
+    ui->listModel->clear();
+}
+
+void TXID::updateList()
+{
+    ui->listModel->clear();
+    QModelIndexList indexes = ui->treeView->selectionModel()->selectedIndexes();
+    if (indexes.size() > 0)
+    {
+        for (int n = 0; n < indexes.size()/4; ++n)
+        {
+            auto name = indexes.at(n * 4).data(0).toString();
+
+            if (name.contains(".m2") || name.contains(".mdx"))
+            {
+                QString file = file_model->filePath(indexes.at(n * 4));
+                if(ui->listModel->findItems(file, Qt::MatchContains).isEmpty())
+                    ui->listModel->addItem(file);
+            }
+            else
+            {
+                QDirIterator it(file_model->filePath(indexes.at(n * 4)), QStringList() << "*.m2", QDir::Files, QDirIterator::Subdirectories);
+
+                while (it.hasNext())
+                {
+                    QString file = it.next();
+                    if(ui->listModel->findItems(file, Qt::MatchContains).isEmpty())
+                        ui->listModel->addItem(file);
+                }
+            }
+        }
+    }
     updateCount();
 }
 

@@ -22,8 +22,9 @@ public:
         texture.clear();
     };
     void setDictionnary(QMap<qint32, QString> dic) {Dictonnary = dic;};
-    bool getInformation();
+    bool getInformation(bool onlyShadow = false);
     void updateTextures();
+    void updateBoneLookupTable();
 
 signals:
     void updated();
@@ -35,8 +36,13 @@ private:
     qint8 error_type = -1;
 
     qint32 MD20Size;
+
     qint32 nTextures;
     qint32 offTextures;
+
+    qint32 nBoneLookupTable;
+    qint32 ofsBoneLookupTable;
+
     QVector<int> txid;
     QVector<QString> texture;
 };

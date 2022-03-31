@@ -15,6 +15,10 @@
 #include <QRegularExpression>
 #include <QRegularExpressionMatch>
 
+#include <QFileSystemModel>
+#include <QModelIndexList>
+#include <QModelIndex>
+
 QT_BEGIN_NAMESPACE
 namespace Ui { class TXID; }
 QT_END_NAMESPACE
@@ -50,6 +54,7 @@ private:
     Ui::TXID *ui;
     QMap<qint32, QString> textures;
     QMap<QString, qint8> errorList;
+    QFileSystemModel* file_model;
 
     int fixed = 0;
     int count = 0;
@@ -59,7 +64,6 @@ private:
 
     void generateModelList(QString);
     bool listfileExist();
-    void initializeTree();
     void populateFileAlreadyConverted(QString modelName);
 
     QString getError(qint8);
@@ -81,8 +85,9 @@ private slots:
     void updateProgressBar();
     // ui_txid.h
     void selectDirectory();
-    void removeSelectedItem(bool onlyListModel = false);
     void fixAllModel();
-    void listModelUpdate();
+    void fixAllModelShadow();
+
+    void updateList();
 };
 #endif // TXID_H

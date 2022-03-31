@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>683</width>
-    <height>894</height>
+    <width>1073</width>
+    <height>912</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -72,6 +72,19 @@
         </property>
         <property name="alignment">
          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="fix_shadow">
+        <property name="minimumSize">
+         <size>
+          <width>120</width>
+          <height>48</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>Fix Shadow</string>
         </property>
        </widget>
       </item>
@@ -150,7 +163,7 @@
          <number>0</number>
         </property>
         <item>
-         <widget class="QTreeWidget" name="treeModel">
+         <widget class="QTreeView" name="treeView">
           <property name="minimumSize">
            <size>
             <width>384</width>
@@ -161,16 +174,8 @@
            <bool>true</bool>
           </property>
           <property name="selectionMode">
-           <enum>QAbstractItemView::ExtendedSelection</enum>
+           <enum>QAbstractItemView::MultiSelection</enum>
           </property>
-          <attribute name="headerVisible">
-           <bool>false</bool>
-          </attribute>
-          <column>
-           <property name="text">
-            <string notr="true">1</string>
-           </property>
-          </column>
          </widget>
         </item>
         <item>

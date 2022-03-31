@@ -1,5 +1,7 @@
 #include "fix.h"
 
+#include <QDebug>
+
 void Fix::run()
 {
     if ( getInformation() )
@@ -7,7 +9,7 @@ void Fix::run()
     else emit sendError(model, error_type);
 }
 
-bool Fix::getInformation()
+bool Fix::getInformation(bool onlyShadow)
 {
     QFile file(model);
 
@@ -24,7 +26,7 @@ bool Fix::getInformation()
     in.skipRawData(0x4);
     in >> MD20Size;
 
-    if (MD20Size <= 264)
+    if (MD20Size <= 264 && !onlyShadow)
     {
         error_type = 1;
         file.close();
@@ -34,6 +36,15 @@ bool Fix::getInformation()
     in.skipRawData(0x50);
     in >> nTextures;
     in >> offTextures;
+
+    if (onlyShadow)
+    {
+        in.skipRawData(0x18);
+        in >> nBoneLookupTable;
+        in >> ofsBoneLookupTable;
+        file.close();
+        return true;
+    }
 
     in.device()->seek(MD20Size + 0x8);
 
@@ -189,6 +200,40 @@ void Fix::updateTextures()
             in << (qint8)0x0;
         }
     }
+
+    file.close();
+    emit updated();
+}
+
+void Fix::updateBoneLookupTable()
+{
+    if (nBoneLookupTable <= 0)
+    {
+        error_type = 3;
+        return;
+    }
+
+    QFile file(model);
+
+    if (MD20Size != 264)
+    {
+        error_type = 3;
+        return;
+    }
+
+    if (!file.exists())
+    {
+        error_type = 0;
+        return;
+    }
+
+    file.open(QIODevice::ReadWrite);
+    QDataStream in(&file);
+    in.setByteOrder(QDataStream::LittleEndian);
+
+    in.device()->seek(ofsBoneLookupTable);
+    for (int i = 0; i < nBoneLookupTable; ++i)
+        in << (qint16)(0x00);
 
     file.close();
     emit updated();
